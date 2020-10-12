@@ -1,14 +1,24 @@
-FROM golang:1.14.1@sha256:08d16c1e689e86df1dae66d8ef4cec49a9d822299ec45e68a810c46cb705628d
+FROM golang:1.12.0
 
-WORKDIR /workdir
-COPY . /workdir
+ENV USER root
 
-RUN git clone https://github.com/cloudflare/cfssl_trust.git /etc/cfssl && \
-    make clean && \
-    make bin/rice && ./bin/rice embed-go -i=./cli/serve && \
-    make all && cp bin/* /usr/bin/
+WORKDIR /go/src/github.com/cloudflare/cfssl
+COPY . .
+
+# restore all deps and build
+RUN go get github.com/cloudflare/cfssl_trust/... && \
+  go get github.com/GeertJohan/go.rice/rice && \
+  rice embed-go -i=./cli/serve && \
+  cp -R /go/src/github.com/cloudflare/cfssl_trust /etc/cfssl && \
+  go install ./cmd/... && \
+  go clean -r -cache -modcache
+
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+RUN python get-pip.py
+RUN pip install awscli && pip cache purge
+
+RUN chmod 755 init_cfssl.sh
 
 EXPOSE 8888
 
-ENTRYPOINT ["cfssl"]
-CMD ["--help"]
+CMD /go/src/github.com/cloudflare/cfssl/init_cfssl.sh
